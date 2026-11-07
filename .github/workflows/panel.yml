@@ -1,0 +1,59 @@
+name: Actualizar panel
+
+on:
+  schedule:
+    - cron: "30 5 * * *"   # cada día a las 05:30 UTC
+  workflow_dispatch:        # permite lanzarlo a mano
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar cliente de Garmin
+        run: python -m pip install garmin-connect-personal-api-python
+
+      - name: Descargar datos y crear el panel
+        env:
+          GARMIN_PERSONAL_API_KEY: ${{ secrets.GARMIN_PERSONAL_API_KEY }}
+        run: python generar_panel.py
+
+      - name: Cifrar el panel con tu contraseña
+        env:
+          PANEL_PASSWORD: ${{ secrets.PANEL_PASSWORD }}
+        run: |
+          test -n "$PANEL_PASSWORD" || { echo "Falta el secreto PANEL_PASSWORD"; exit 1; }
+          npx --yes staticrypt@3 panel.html -p "$PANEL_PASSWORD" -d cifrado --short
+          mkdir -p public
+          cp cifrado/panel.html public/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Publicar
+        id: despliegue
+        uses: actions/deploy-pages@v4
