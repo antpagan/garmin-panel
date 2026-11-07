@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Mi panel de entrenamiento</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --fondo: #f5f6f2; --tarjeta: #ffffff; --tinta: #1b2a2e; --suave: #5d6b6f;
+    --linea: #dfe3dd; --acento: #0e6f8a; --acento2: #e08a2c;
+    --z1: #b8d8e3; --z2: #6fb3c9; --z3: #3f9a8a; --z4: #e0a032; --z5: #c8452f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #121b1e; --tarjeta: #1a2529; --tinta: #e8eeee; --suave: #9fb0b3;
+      --linea: #2b393d; --acento: #4cb6d3; --acento2: #f0a24a;
+      --z1: #3b6070; --z2: #4a8ba3; --z3: #3f9a8a; --z4: #e0a032; --z5: #e0614a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fondo); color: var(--tinta);
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
+  h1 { font-size: 1.5rem; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  .actualizado { color: var(--suave); font-size: .85rem; }
+  .filtros { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  select { background: var(--tarjeta); color: var(--tinta); border: 1px solid var(--linea);
+           border-radius: 8px; padding: 8px 10px; font-size: .95rem; }
+  select:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .kpi { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 10px; padding: 12px 14px; }
+  .kpi .valor { font-size: 1.6rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .nombre { color: var(--suave); font-size: .85rem; }
+  .bloque { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .bloque h2 { font-size: 1rem; margin: 0 0 10px; font-weight: 600; }
+  .rejilla { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .rejilla { grid-template-columns: 1fr; } }
+  .grafica { position: relative; height: 260px; }
+  .nota { color: var(--suave); font-size: .85rem; margin: 8px 0 0; }
+  .tabla-caja { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+  th { color: var(--suave); font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  .vacio { color: var(--suave); padding: 24px 0; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mi panel de entrenamiento</h1>
+    <span class="actualizado" id="actualizado"></span>
+  </header>
+
+  <div class="filtros">
+    <label>Deporte
+      <select id="fDeporte"></select>
+    </label>
+    <label>Periodo
+      <select id="fPeriodo">
+        <option value="28">Últimas 4 semanas</option>
+        <option value="84" selected>Últimas 12 semanas</option>
+        <option value="182">Últimos 6 meses</option>
+        <option value="365">Último año</option>
+        <option value="0">Todo</option>
+      </select>
+    </label>
+  </div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <div class="bloque">
+    <h2>Distancia por semana (km)</h2>
+    <div class="grafica"><canvas id="gDistancia"></canvas></div>
+  </div>
+
+  <div class="rejilla">
+    <div class="bloque">
+      <h2>Tiempo por semana (horas)</h2>
+      <div class="grafica"><canvas id="gTiempo"></canvas></div>
+    </div>
+    <div class="bloque">
+      <h2>Carga de entrenamiento por semana</h2>
+      <div class="grafica"><canvas id="gCarga"></canvas></div>
+      <p class="nota" id="notaCarga"></p>
+    </div>
+  </div>
+
+  <div class="rejilla">
+    <div class="bloque">
+      <h2>Tiempo en zonas de frecuencia cardiaca</h2>
+      <div class="grafica"><canvas id="gZonas"></canvas></div>
+    </div>
+    <div class="bloque">
+      <h2>Ritmo medio por actividad (min/km)</h2>
+      <div class="grafica"><canvas id="gRitmo"></canvas></div>
+      <p class="nota" id="notaRitmo"></p>
+    </div>
+  </div>
+
+  <div class="bloque">
+    <h2>Últimas actividades</h2>
+    <div class="tabla-caja"><table id="tabla"></table></div>
+  </div>
+</main>
+
+<script>
+const DATOS = __DATOS__;
+
+const NOMBRES = {
+  running: "Correr", trail_running: "Trail", treadmill_running: "Cinta",
+  cycling: "Bici", indoor_cycling: "Bici indoor", road_biking: "Bici de carretera",
+  mountain_biking: "Bici de montaña", gravel_cycling: "Gravel",
+  lap_swimming: "Natación", open_water_swimming: "Aguas abiertas",
+  walking: "Caminar", hiking: "Senderismo", strength_training: "Fuerza",
+  yoga: "Yoga", cardio: "Cardio", elliptical: "Elíptica", other: "Otro"
+};
+const nombreTipo = t => NOMBRES[t] || (t || "otro").replace(/_/g, " ");
+const esCarrera = t => /running/.test(t);
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (n, d = 0) => Number(n).toLocaleString("es-ES", { minimumFractionDigits: d, maximumFractionDigits: d });
+const mmss = min => { const t = Math.round(min * 60); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+
+function fechaDe(a) { const [y, m, d] = a.fecha.slice(0, 10).split("-").map(Number); return new Date(y, m - 1, d); }
+function lunes(d) { const x = new Date(d); const dia = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dia); x.setHours(0, 0, 0, 0); return x; }
+function clave(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function etiquetaSemana(d) { return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" }); }
+
+const act = DATOS.actividades.map(a => ({ ...a, _f: fechaDe(a) })).sort((a, b) => a._f - b._f || a.fecha.localeCompare(b.fecha));
+
+document.getElementById("actualizado").textContent = "Actualizado: " + DATOS.generado;
+
+// Filtros
+const selDep = document.getElementById("fDeporte");
+const selPer = document.getElementById("fPeriodo");
+const tipos = [...new Set(act.map(a => a.tipo))].sort((a, b) => nombreTipo(a).localeCompare(nombreTipo(b), "es"));
+selDep.innerHTML = '<option value="">Todos</option>' + tipos.map(t => `<option value="${t}">${nombreTipo(t)}</option>`).join("");
+selDep.onchange = selPer.onchange = pintar;
+
+const graficas = {};
+function grafica(id, config) {
+  if (graficas[id]) graficas[id].destroy();
+  graficas[id] = new Chart(document.getElementById(id), config);
+}
+
+function semanas(lista, hasta, desde) {
+  // devuelve todas las semanas entre desde y hasta (también las vacías)
+  const mapa = new Map();
+  let s = lunes(desde);
+  const fin = lunes(hasta);
+  while (s <= fin) { mapa.set(clave(s), { inicio: new Date(s), km: 0, horas: 0, carga: 0 }); s.setDate(s.getDate() + 7); }
+  lista.forEach(a => {
+    const k = clave(lunes(a._f));
+    const w = mapa.get(k);
+    if (w) { w.km += a.km; w.horas += a.min / 60; w.carga += a.carga || 0; }
+  });
+  return [...mapa.values()];
+}
+
+function pintar() {
+  const dep = selDep.value;
+  const dias = Number(selPer.value);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const desde = dias ? new Date(hoy.getTime() - dias * 86400000) : (act.length ? act[0]._f : hoy);
+  const lista = act.filter(a => a._f >= desde && (!dep || a.tipo === dep));
+
+  const texto = css("--suave"), linea = css("--linea"), acento = css("--acento"), acento2 = css("--acento2");
+  Chart.defaults.color = texto;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  const ejes = { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: linea } } };
+
+  // KPIs
+  const km = lista.reduce((s, a) => s + a.km, 0);
+  const horas = lista.reduce((s, a) => s + a.min, 0) / 60;
+  const carga = lista.reduce((s, a) => s + (a.carga || 0), 0);
+  const conFc = lista.filter(a => a.fc);
+  const fcMedia = conFc.length ? conFc.reduce((s, a) => s + a.fc, 0) / conFc.length : 0;
+  document.getElementById("kpis").innerHTML = [
+    [fmt(lista.length), "Actividades"],
+    [fmt(km, 1) + " km", "Distancia"],
+    [fmt(horas, 1) + " h", "Tiempo"],
+    [fmt(carga), "Carga total"],
+    [fcMedia ? fmt(fcMedia) + " ppm" : "–", "FC media"]
+  ].map(([v, n]) => `<div class="kpi"><div class="valor">${v}</div><div class="nombre">${n}</div></div>`).join("");
+
+  const ws = semanas(lista, hoy, desde);
+  const etiquetas = ws.map(w => etiquetaSemana(w.inicio));
+
+  grafica("gDistancia", { type: "bar",
+    data: { labels: etiquetas, datasets: [{ label: "km", data: ws.map(w => +w.km.toFixed(1)), backgroundColor: acento, borderRadius: 3 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: ejes } });
+
+  grafica("gTiempo", { type: "bar",
+    data: { labels: etiquetas, datasets: [{ label: "horas", data: ws.map(w => +w.horas.toFixed(2)), backgroundColor: acento2, borderRadius: 3 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: ejes } });
+
+  grafica("gCarga", { type: "line",
+    data: { labels: etiquetas, datasets: [{ label: "carga", data: ws.map(w => Math.round(w.carga)), borderColor: acento, backgroundColor: acento, tension: .25, pointRadius: 2 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: ejes } });
+  const hayCarga = lista.some(a => a.carga);
+  document.getElementById("notaCarga").textContent = hayCarga ? "" : "Garmin no ha enviado carga de entrenamiento para estas actividades.";
+
+  // Zonas de FC
+  const zonas = [0, 0, 0, 0, 0];
+  lista.forEach(a => (a.zonas || []).forEach((m, i) => { zonas[i] += m; }));
+  const colores = ["--z1", "--z2", "--z3", "--z4", "--z5"].map(css);
+  grafica("gZonas", { type: "bar",
+    data: { labels: ["Zona 1", "Zona 2", "Zona 3", "Zona 4", "Zona 5"], datasets: [{ label: "horas", data: zonas.map(m => +(m / 60).toFixed(2)), backgroundColor: colores, borderRadius: 3 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: ejes } });
+
+  // Ritmo (solo carrera)
+  const carreras = lista.filter(a => esCarrera(a.tipo) && a.km >= 1 && a.min > 0);
+  const ritmos = carreras.map(a => a.min / a.km);
+  grafica("gRitmo", { type: "line",
+    data: { labels: carreras.map(a => a._f.toLocaleDateString("es-ES", { day: "numeric", month: "short" })),
+            datasets: [{ label: "min/km", data: ritmos.map(r => +r.toFixed(3)), borderColor: acento2, backgroundColor: acento2, pointRadius: 3, tension: .2 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => mmss(c.parsed.y) + " min/km" } } },
+      scales: { x: ejes.x, y: { reverse: true, grid: { color: linea }, ticks: { callback: v => mmss(v) } } } } });
+  document.getElementById("notaRitmo").textContent = carreras.length ? "Cuanto más arriba, más rápido." : "No hay carreras con los filtros elegidos.";
+
+  // Tabla
+  const ultimas = lista.slice().reverse().slice(0, 20);
+  const tabla = document.getElementById("tabla");
+  if (!ultimas.length) { tabla.innerHTML = '<tr><td class="vacio">No hay actividades con estos filtros.</td></tr>'; return; }
+  tabla.innerHTML = "<thead><tr><th>Fecha</th><th>Deporte</th><th>Nombre</th><th class='num'>Km</th><th class='num'>Tiempo</th><th class='num'>Ritmo</th><th class='num'>FC</th><th class='num'>Carga</th></tr></thead><tbody>" +
+    ultimas.map(a => {
+      const h = Math.floor(a.min / 60), m = Math.round(a.min % 60);
+      const ritmo = esCarrera(a.tipo) && a.km >= 1 ? mmss(a.min / a.km) : "–";
+      const nom = String(a.nombre || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      return `<tr><td>${a._f.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}</td><td>${nombreTipo(a.tipo)}</td><td>${nom}</td>` +
+        `<td class="num">${fmt(a.km, 2)}</td><td class="num">${h ? h + " h " : ""}${m} min</td><td class="num">${ritmo}</td>` +
+        `<td class="num">${a.fc ? fmt(a.fc) : "–"}</td><td class="num">${a.carga ? fmt(a.carga) : "–"}</td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+pintar();
+</script>
+</body>
+</html>
