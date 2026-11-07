@@ -1,0 +1,42 @@
+name: Probar conexion con Garmin
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar cliente de Garmin
+        run: python -m pip install garmin-connect-personal-api-python
+
+      - name: Probar y mostrar solo la estructura
+        env:
+          GARMIN_PERSONAL_API_KEY: ${{ secrets.GARMIN_PERSONAL_API_KEY }}
+        run: |
+          gc-personal activities --start 0 --limit 3 > salida.txt
+          python - <<'EOF'
+          import json
+          texto = open("salida.txt", encoding="utf-8").read()
+          print("Caracteres:", len(texto), "| Lineas:", texto.count("\n") + 1)
+          print("Empieza por:", repr(texto.strip()[:1]))
+          def forma(x, nivel=0):
+              pad = "  " * nivel
+              if isinstance(x, dict):
+                  for k, v in x.items():
+                      print(f"{pad}{k}: {type(v).__name__}")
+                      if isinstance(v, (dict, list)) and nivel < 2:
+                          forma(v, nivel + 1)
+              elif isinstance(x, list):
+                  print(f"{pad}[lista de {len(x)}]")
+                  if x and nivel < 3:
+                      forma(x[0], nivel + 1)
+          try:
+              forma(json.loads(texto))
+          except Exception as e:
+              print("No es JSON:", type(e).__name__)
+          EOF
